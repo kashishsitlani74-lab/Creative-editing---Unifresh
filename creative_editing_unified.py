@@ -37,15 +37,28 @@ REMBG_AVAILABLE = importlib.util.find_spec("rembg") is not None
 def get_rembg_session():
     """Load the rembg model once per app instance and reuse it for every image.
     Previously a brand new session (i.e. the whole model) was created for every single
-    image - that's what was making batches with background removal slow."""
+    image - that's what was making batches with background removal slow.
+
+    isnet-general-use gives noticeably cleaner edges than u2netp on thin details
+    (cords, straps, handles, hair) - it's a larger/slower model but the accuracy
+    is worth it for product photos where handle/strap detail matters."""
     from rembg import new_session
-    return new_session("u2netp")
+    return new_session("isnet-general-use")
 
 
 def remove_background(img: Image.Image) -> Image.Image:
     from rembg import remove as rembg_remove
     session = get_rembg_session()
-    result = rembg_remove(img.convert("RGBA"), session=session)
+    # alpha_matting refines the initial mask along edges - this is what fixes thin
+    # dark objects (like bag handles) getting washed out or leaving a gray halo.
+    result = rembg_remove(
+        img.convert("RGBA"),
+        session=session,
+        alpha_matting=True,
+        alpha_matting_foreground_threshold=240,
+        alpha_matting_background_threshold=10,
+        alpha_matting_erode_size=5,
+    )
     return result if isinstance(result, Image.Image) else Image.open(io.BytesIO(result)).convert("RGBA")
 
 
